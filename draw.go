@@ -244,15 +244,13 @@ func drawIsland(dst *ebiten.Image, w *sim.World, night bool) {
 	if night {
 		sand = color.RGBA{70, 64, 50, 255}
 	}
-	ip := sim.IslandPos
-	vector.DrawFilledCircle(dst, f32(ip.X), f32(ip.Y), sim.IslandRadius, sand, true)
-	vector.DrawFilledCircle(dst, f32(ip.X-55), f32(ip.Y+15), 40, sand, true)
-	vector.DrawFilledCircle(dst, f32(ip.X+50), f32(ip.Y+20), 38, sand, true)
+	ip := sim.LighthousePos
+	vector.DrawFilledCircle(dst, f32(ip.X-20), f32(ip.Y+12), sim.IslandRadius*0.7, sand, true)
+	vector.DrawFilledCircle(dst, f32(ip.X+18), f32(ip.Y+14), sim.IslandRadius*0.65, sand, true)
+	vector.DrawFilledCircle(dst, f32(ip.X), f32(ip.Y), sim.IslandRadius*0.85, sand, true)
 
-	// Harbor pier and dock marker.
-	hp := sim.HarborPos
-	vector.DrawFilledRect(dst, f32(hp.X-4), f32(hp.Y), 8, f32(ip.Y-sim.IslandRadius-hp.Y+6), color.RGBA{110, 80, 50, 255}, true)
-	vector.StrokeCircle(dst, f32(hp.X), f32(hp.Y), sim.HarborRadius, 2, rgba(colGood, 0.6), true)
+	// Boats dock anywhere along this ring around the island.
+	vector.StrokeCircle(dst, f32(ip.X), f32(ip.Y), sim.IslandRadius+4, 2, rgba(colGood, 0.5), true)
 
 	// Lighthouse tower.
 	lp := sim.LighthousePos

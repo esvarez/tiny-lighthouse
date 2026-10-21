@@ -16,7 +16,8 @@ func emptyNight(n int) *World {
 	return w
 }
 
-// aimAway points the beam straight down, away from the sea.
+// aimAway points the beam straight down, away from the test boats
+// (the boats in these tests sail in from the top).
 var aimAway = Input{Aim: Vec{LighthousePos.X, Height + 100}}
 
 func run(w *World, in Input, seconds float64) {
@@ -34,11 +35,12 @@ func TestBeamLightsPointInsideCone(t *testing.T) {
 	if w.Lit(Vec{LighthousePos.X + 300, LighthousePos.Y - 20}, 5) {
 		t.Fatal("point far to the side should not be lit")
 	}
-	if w.Lit(Vec{LighthousePos.X, LighthousePos.Y - 500}, 5) {
+	if w.Lit(Vec{LighthousePos.X - 450, LighthousePos.Y}, 5) {
 		t.Fatal("point beyond range should not be lit")
 	}
+	w.BeamAngle = math.Pi // straight left
 	w.Focus = true
-	if !w.Lit(Vec{LighthousePos.X, LighthousePos.Y - 500}, 5) {
+	if !w.Lit(Vec{LighthousePos.X - 450, LighthousePos.Y}, 5) {
 		t.Fatal("focused beam should reach further")
 	}
 }
@@ -57,7 +59,7 @@ func TestBoatDocksAndPays(t *testing.T) {
 	w := emptyNight(1)
 	w.spawnQueue = []BoatKind{Fishing} // keep the night going
 	w.spawnTimer = 1e9
-	w.addBoat(Fishing, Vec{HarborPos.X, 100})
+	w.addBoat(Fishing, Vec{LighthousePos.X, 20})
 	run(w, aimAway, 30)
 	if w.Docked != 1 || w.Coins != Specs[Fishing].Reward {
 		t.Fatalf("docked=%d coins=%d", w.Docked, w.Coins)
@@ -68,8 +70,8 @@ func TestBoatWrecksOnUnlitRock(t *testing.T) {
 	w := emptyNight(1)
 	w.spawnQueue = []BoatKind{Fishing}
 	w.spawnTimer = 1e9
-	w.Rocks = []*Rock{{Pos: Vec{HarborPos.X, 250}, R: 18}}
-	w.addBoat(Fishing, Vec{HarborPos.X, 60})
+	w.Rocks = []*Rock{{Pos: Vec{LighthousePos.X, 170}, R: 30}}
+	w.addBoat(Fishing, Vec{LighthousePos.X, -20})
 	w.LampOn = false
 	run(w, aimAway, 30)
 	if w.Wrecked != 1 || w.Hearts != HeartsPerNite-1 {
@@ -82,12 +84,50 @@ func TestBoatAvoidsLitRock(t *testing.T) {
 		w := emptyNight(1)
 		w.spawnQueue = []BoatKind{Fishing}
 		w.spawnTimer = 1e9
-		w.Rocks = []*Rock{{Pos: Vec{HarborPos.X, 250}, R: 18}}
-		w.addBoat(k, Vec{HarborPos.X, 40})
-		run(w, Input{Aim: Vec{HarborPos.X, 250}, Focus: true}, 40)
+		w.Rocks = []*Rock{{Pos: Vec{LighthousePos.X, 170}, R: 30}}
+		w.addBoat(k, Vec{LighthousePos.X, -20})
+		run(w, Input{Aim: Vec{LighthousePos.X, 170}}, 40)
 		if w.Wrecked != 0 || w.Docked != 1 {
 			t.Errorf("%s: wrecked=%d docked=%d", Specs[k].Name, w.Wrecked, w.Docked)
 		}
+	}
+}
+
+func TestBoatTurnsTowardBeam(t *testing.T) {
+	w := emptyNight(1)
+	w.spawnQueue = []BoatKind{Fishing}
+	w.spawnTimer = 1e9
+	// A boat coming from the top-left corner, beam pointing straight up.
+	b := w.addBoat(Fishing, Vec{LighthousePos.X - 200, 40})
+	start := b.Pos.X
+	run(w, Input{Aim: Vec{LighthousePos.X, 0}}, 3)
+	pulled := b.Pos.X - start
+	w = emptyNight(1)
+	w.spawnQueue = []BoatKind{Fishing}
+	w.spawnTimer = 1e9
+	b = w.addBoat(Fishing, Vec{LighthousePos.X - 200, 40})
+	w.LampOn = false
+	run(w, Input{Aim: Vec{LighthousePos.X, 0}}, 3)
+	free := b.Pos.X - start
+	if pulled <= free+5 {
+		t.Fatalf("beam should pull the boat sideways: pulled=%.1f free=%.1f", pulled, free)
+	}
+}
+
+func TestBoatsSpawnOnEverySide(t *testing.T) {
+	w := emptyNight(1)
+	var top, bottom, left, right bool
+	for i := 0; i < 200; i++ {
+		w.spawnBoat(Fishing)
+	}
+	for _, b := range w.Boats {
+		top = top || b.Pos.Y < 0
+		bottom = bottom || b.Pos.Y > Height
+		left = left || b.Pos.X < 0
+		right = right || b.Pos.X > Width
+	}
+	if !top || !bottom || !left || !right {
+		t.Fatalf("top=%v bottom=%v left=%v right=%v", top, bottom, left, right)
 	}
 }
 
@@ -97,8 +137,8 @@ func TestThreeWrecksEndsRun(t *testing.T) {
 	w.spawnTimer = 1e9
 	for i := 0; i < 3; i++ {
 		x := 200 + float64(i)*250
-		w.Rocks = append(w.Rocks, &Rock{Pos: Vec{x, 200}, R: 18})
-		w.addBoat(Fishing, Vec{x, 199})
+		w.Rocks = append(w.Rocks, &Rock{Pos: Vec{x, 100}, R: 30})
+		w.addBoat(Fishing, Vec{x, 99})
 	}
 	w.Update(dt, aimAway)
 	if w.Phase != PhaseLost {
@@ -202,9 +242,9 @@ func TestNightsArePlayable(t *testing.T) {
 
 // botAim lights the unknown rock that the most boats are about to reach.
 func botAim(w *World) Vec {
-	aim, best := HarborPos.Sub(Vec{0, 200}), math.Inf(1)
+	aim, best := LighthousePos.Sub(Vec{0, 200}), math.Inf(1)
 	for _, b := range w.Boats {
-		h := FromAngle(HarborPos.Sub(b.Pos).Angle())
+		h := FromAngle(LighthousePos.Sub(b.Pos).Angle())
 		for _, r := range w.Rocks {
 			if b.memory[r] {
 				continue

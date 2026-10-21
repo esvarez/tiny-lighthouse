@@ -12,9 +12,9 @@ const (
 	Width  = 960
 	Height = 640
 
-	KnownTime     = 5.0 // seconds a lit rock stays known to every boat
-	HarborRadius  = 22.0
-	IslandRadius  = 62.0
+	KnownTime     = 5.0   // seconds a lit rock stays known to every boat
+	IslandRadius  = 40.0  // boats dock when they reach the island
+	BeamPull      = 110.0 // boats this close to the beam turn toward it
 	SecondLampR   = 75.0
 	HornRadius    = 170.0
 	HornCooldown  = 20.0
@@ -27,9 +27,9 @@ const (
 )
 
 var (
-	LighthousePos = Vec{Width / 2, Height - 50}
-	HarborPos     = Vec{Width / 2, Height - 128}
-	IslandPos     = Vec{Width / 2, Height - 50}
+	// The lighthouse stands on an island in the middle of the bay and is
+	// also the harbor every boat sails to.
+	LighthousePos = Vec{Width / 2, Height / 2}
 )
 
 type Phase int
@@ -232,6 +232,27 @@ func (w *World) Lit(p Vec, r float64) bool {
 	return math.Abs(angleDiff(w.BeamAngle, d.Angle())) <= w.BeamHalfAngle()+slack
 }
 
+// beamPull reports where a boat at p steers when it sees the main beam: to a
+// point on the beam's centre line a little closer to the lighthouse, so
+// boats are drawn into the light and then follow it home.
+func (w *World) beamPull(p Vec) (Vec, bool) {
+	if !w.BeamOn() {
+		return Vec{}, false
+	}
+	axis := FromAngle(w.BeamAngle)
+	along := p.Sub(LighthousePos).Dot(axis)
+	reach := w.BeamRange() * w.fogFactor(p)
+	if along <= IslandRadius || along > reach+BeamPull {
+		return Vec{}, false
+	}
+	// Distance from the edge of the cone, measured perpendicular to the axis.
+	lat := math.Abs(axis.Cross(p.Sub(LighthousePos)))
+	if lat-along*math.Tan(w.BeamHalfAngle()) > BeamPull {
+		return Vec{}, false
+	}
+	return LighthousePos.Add(axis.Scale(math.Min(along, reach) - 60)), true
+}
+
 // Update advances the simulation by dt seconds.
 func (w *World) Update(dt float64, in Input) {
 	w.Time += dt
@@ -409,9 +430,12 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 	}
 
 	h := FromAngle(b.Heading)
-	desired := HarborPos.Sub(b.Pos).Angle()
-	if b.Kind == Rowboat && b.Pos.Dist(HarborPos) > 120 {
+	desired := LighthousePos.Sub(b.Pos).Angle()
+	if b.Kind == Rowboat && b.Pos.Dist(LighthousePos) > 120 {
 		desired += math.Sin(w.Time*0.7+b.phase) * 1.1
+	}
+	if target, ok := w.beamPull(b.Pos); ok {
+		desired = target.Sub(b.Pos).Angle()
 	}
 
 	// Feeler: find the nearest remembered rock in our path and turn away.
@@ -458,7 +482,7 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 			return boatWrecked
 		}
 	}
-	if b.Pos.Dist(HarborPos) < HarborRadius+s.Radius {
+	if b.Pos.Dist(LighthousePos) < IslandRadius+s.Radius {
 		return boatDocked
 	}
 	return boatSailing
@@ -468,11 +492,13 @@ func (w *World) spawnBoat(k BoatKind) {
 	var p Vec
 	switch w.rng.Intn(4) {
 	case 0: // left edge
-		p = Vec{-20, 40 + w.rng.Float64()*260}
+		p = Vec{-20, 40 + w.rng.Float64()*(Height-80)}
 	case 1: // right edge
-		p = Vec{Width + 20, 40 + w.rng.Float64()*260}
-	default: // top edge
-		p = Vec{60 + w.rng.Float64()*(Width-120), -20}
+		p = Vec{Width + 20, 40 + w.rng.Float64()*(Height-80)}
+	case 2: // top edge
+		p = Vec{40 + w.rng.Float64()*(Width-80), -20}
+	default: // bottom edge
+		p = Vec{40 + w.rng.Float64()*(Width-80), Height + 20}
 	}
 	w.addBoat(k, p)
 }
@@ -481,7 +507,7 @@ func (w *World) addBoat(k BoatKind, p Vec) *Boat {
 	b := &Boat{
 		Kind:    k,
 		Pos:     p,
-		Heading: HarborPos.Sub(p).Angle(),
+		Heading: LighthousePos.Sub(p).Angle(),
 		memory:  map[*Rock]bool{},
 		phase:   w.rng.Float64() * 2 * math.Pi,
 	}
@@ -506,15 +532,20 @@ func (w *World) startNight(n int) {
 
 	w.Rocks = nil
 	for i := 0; i < cfg.Rocks; i++ {
-		w.Rocks = append(w.Rocks, &Rock{Pos: w.freeSpot(70), R: 13 + w.rng.Float64()*11})
+		w.Rocks = append(w.Rocks, &Rock{Pos: w.freeSpot(100), R: 22 + w.rng.Float64()*16})
 	}
 	for i := 0; i < cfg.Logs; i++ {
-		p := Vec{w.rng.Float64() * Width, 110 + w.rng.Float64()*300}
+		// Logs drift in a band above or below the island.
+		y := 60 + w.rng.Float64()*160
+		if w.rng.Intn(2) == 0 {
+			y = Height - y
+		}
+		p := Vec{w.rng.Float64() * Width, y}
 		v := 10 + w.rng.Float64()*10
 		if w.rng.Intn(2) == 0 {
 			v = -v
 		}
-		w.Rocks = append(w.Rocks, &Rock{Pos: p, Vel: Vec{v, 0}, R: 9, Log: true})
+		w.Rocks = append(w.Rocks, &Rock{Pos: p, Vel: Vec{v, 0}, R: 13, Log: true})
 	}
 	w.placeBuoys()
 
@@ -525,7 +556,7 @@ func (w *World) startNight(n int) {
 			vx = -vx
 		}
 		w.Fogs = append(w.Fogs, Fog{
-			Pos: Vec{w.rng.Float64() * Width, 60 + w.rng.Float64()*360},
+			Pos: Vec{w.rng.Float64() * Width, 40 + w.rng.Float64()*(Height-80)},
 			R:   80 + w.rng.Float64()*60,
 			VX:  vx,
 		})
@@ -550,8 +581,8 @@ func (w *World) startNight(n int) {
 func (w *World) freeSpot(minSep float64) Vec {
 	var p Vec
 	for try := 0; try < 200; try++ {
-		p = Vec{70 + w.rng.Float64()*(Width-140), 130 + w.rng.Float64()*320}
-		if p.Dist(HarborPos) < 120 {
+		p = Vec{90 + w.rng.Float64()*(Width-180), 90 + w.rng.Float64()*(Height-180)}
+		if p.Dist(LighthousePos) < 130 {
 			continue
 		}
 		ok := true
@@ -576,7 +607,7 @@ func (w *World) placeBuoys() {
 			if r.Log || r.Buoy {
 				continue
 			}
-			if best == nil || r.Pos.Dist(HarborPos) < best.Pos.Dist(HarborPos) {
+			if best == nil || r.Pos.Dist(LighthousePos) < best.Pos.Dist(LighthousePos) {
 				best = r
 			}
 		}
@@ -608,7 +639,7 @@ func (w *World) updateDay(in Input) {
 	if in.Repair {
 		w.Message = w.Repair()
 	}
-	if in.Click && w.Owned[SecondLamp] > 0 && in.Aim.Dist(IslandPos) > IslandRadius+10 {
+	if in.Click && w.Owned[SecondLamp] > 0 && in.Aim.Dist(LighthousePos) > IslandRadius+10 {
 		w.LampPos = in.Aim
 		w.LampPlaced = true
 		w.Message = "Second lamp placed."

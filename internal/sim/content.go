@@ -45,7 +45,7 @@ type NightConfig struct {
 
 // Nights follows the progression table of the design document.
 var Nights = [...]NightConfig{
-	{Boats: 4, Kinds: []BoatKind{Fishing}, Rocks: 4, Intro: "Fishing boats head home. Light the rocks so they can steer around them."},
+	{Boats: 4, Kinds: []BoatKind{Fishing}, Rocks: 4, Intro: "Boats sail to the lighthouse and turn toward your beam. Guide them past the rocks."},
 	{Boats: 6, Kinds: []BoatKind{Fishing}, Rocks: 5, OilLimit: true, Intro: "Oil now runs out. Space turns the lamp off to save it."},
 	{Boats: 7, Kinds: []BoatKind{Fishing, Merchant}, New: []BoatKind{Merchant}, Rocks: 6, OilLimit: true, Intro: "Merchant ships are wide and turn slowly. Warn them early."},
 	{Boats: 8, Kinds: []BoatKind{Fishing, Merchant}, Rocks: 6, Fogs: 2, OilLimit: true, Intro: "Light fog: the beam reaches less far inside it."},

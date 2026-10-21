@@ -1,7 +1,7 @@
 # Tide Keeper
 
-A small lighthouse game: point the rotating beam so boats can see the rocks and
-reach the harbor safely. This is a proof of concept written in Go with
+A small lighthouse game: boats sail toward the lighthouse in the middle of the
+bay, and you point its rotating beam to guide them safely past the rocks. This is a proof of concept written in Go with
 [Ebitengine](https://ebitengine.org), based on
 [the game design document](docs/game-design.md).
 
@@ -21,6 +21,8 @@ On Linux, Ebitengine needs the X11/GL headers
 
 **Night**
 - Move the mouse to aim the beam. Hold left click to focus it: narrower, longer reach, more oil.
+- Boats come in from every edge and sail toward the lighthouse. A boat in or near the beam turns toward it
+  and follows the light home, so sweep the beam to lead boats around rocks.
 - A rock inside the beam becomes known to every boat for 5 seconds (orange ring), and nearby captains remember it.
   Boats steer around rocks they know and crash into rocks they don't.
 - Space turns the lamp off and on to save oil (oil is limited from night 2).
