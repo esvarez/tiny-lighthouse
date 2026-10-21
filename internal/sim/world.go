@@ -572,7 +572,7 @@ func (w *World) startNight(n int) {
 	w.rng.Shuffle(len(w.spawnQueue), func(i, j int) {
 		w.spawnQueue[i], w.spawnQueue[j] = w.spawnQueue[j], w.spawnQueue[i]
 	})
-	w.spawnEvery = math.Max(5, 12-float64(n)*0.7)
+	w.spawnEvery = math.Max(3, 8-float64(n)*0.5)
 	w.spawnTimer = 2
 }
 

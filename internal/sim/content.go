@@ -23,11 +23,11 @@ type BoatSpec struct {
 }
 
 var Specs = [...]BoatSpec{
-	Fishing:   {Name: "Fishing boat", Speed: 38, Turn: 1.6, Radius: 7, Lookahead: 90, Reward: 5, RepCost: 1},
-	Merchant:  {Name: "Merchant ship", Speed: 50, Turn: 0.85, Radius: 12, Lookahead: 130, Reward: 12, RepCost: 1},
-	Speedboat: {Name: "Speedboat", Speed: 92, Turn: 2.2, Radius: 6, Lookahead: 55, Reward: 10, RepCost: 1},
-	Ferry:     {Name: "Ferry", Speed: 32, Turn: 1.0, Radius: 11, Lookahead: 100, Reward: 25, RepCost: 2},
-	Rowboat:   {Name: "Lost rowboat", Speed: 30, Turn: 1.8, Radius: 5, Lookahead: 70, Reward: 15, RepCost: 1},
+	Fishing:   {Name: "Fishing boat", Speed: 62, Turn: 2.3, Radius: 7, Lookahead: 115, Reward: 5, RepCost: 1},
+	Merchant:  {Name: "Merchant ship", Speed: 80, Turn: 1.3, Radius: 12, Lookahead: 170, Reward: 12, RepCost: 1},
+	Speedboat: {Name: "Speedboat", Speed: 140, Turn: 3.2, Radius: 6, Lookahead: 75, Reward: 10, RepCost: 1},
+	Ferry:     {Name: "Ferry", Speed: 52, Turn: 1.5, Radius: 11, Lookahead: 130, Reward: 25, RepCost: 2},
+	Rowboat:   {Name: "Lost rowboat", Speed: 48, Turn: 2.6, Radius: 5, Lookahead: 90, Reward: 15, RepCost: 1},
 }
 
 // NightConfig describes what a single night throws at the player.
