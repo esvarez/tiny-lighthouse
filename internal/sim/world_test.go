@@ -79,16 +79,44 @@ func TestBoatWrecksOnUnlitRock(t *testing.T) {
 	}
 }
 
+// Boats in these tests sail in from the left edge toward a rock 220 px
+// before the lighthouse.
+var sideRock = Vec{LighthousePos.X - 280, LighthousePos.Y}
+
 func TestBoatAvoidsLitRock(t *testing.T) {
 	for _, k := range []BoatKind{Fishing, Merchant, Speedboat, Ferry} {
 		w := emptyNight(1)
 		w.spawnQueue = []BoatKind{Fishing}
 		w.spawnTimer = 1e9
-		w.Rocks = []*Rock{{Pos: Vec{LighthousePos.X, 170}, R: 30}}
-		w.addBoat(k, Vec{LighthousePos.X, -20})
-		run(w, Input{Aim: Vec{LighthousePos.X, 170}}, 40)
+		w.Rocks = []*Rock{{Pos: sideRock, R: 30}}
+		w.BeamAngle = math.Pi
+		w.addBoat(k, Vec{-20, LighthousePos.Y})
+		run(w, Input{Aim: sideRock}, 40)
 		if w.Wrecked != 0 || w.Docked != 1 {
 			t.Errorf("%s: wrecked=%d docked=%d", Specs[k].Name, w.Wrecked, w.Docked)
+		}
+	}
+}
+
+func TestRockLitTooLateIsHit(t *testing.T) {
+	for _, k := range []BoatKind{Fishing, Merchant, Speedboat, Ferry} {
+		w := emptyNight(1)
+		w.spawnQueue = []BoatKind{Fishing}
+		w.spawnTimer = 1e9
+		rock := &Rock{Pos: sideRock, R: 30}
+		w.Rocks = []*Rock{rock}
+		b := w.addBoat(k, Vec{-20, LighthousePos.Y})
+		w.LampOn = false
+		// Sail in the dark until the bow is a few hull lengths from the rock...
+		for b.Pos.Dist(rock.Pos) > rock.R+b.Spec().Radius+25 {
+			w.Update(dt, aimAway)
+		}
+		// ...then light it.
+		w.LampOn = true
+		w.BeamAngle = math.Pi
+		run(w, Input{Aim: rock.Pos}, 10)
+		if w.Wrecked != 1 {
+			t.Errorf("%s: lit too late but wrecked=%d", Specs[k].Name, w.Wrecked)
 		}
 	}
 }
@@ -246,7 +274,7 @@ func botAim(w *World) Vec {
 	for _, b := range w.Boats {
 		h := FromAngle(LighthousePos.Sub(b.Pos).Angle())
 		for _, r := range w.Rocks {
-			if b.memory[r] {
+			if _, ok := b.memory[r]; ok {
 				continue
 			}
 			d := r.Pos.Sub(b.Pos)

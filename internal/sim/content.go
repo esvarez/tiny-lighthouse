@@ -18,16 +18,17 @@ type BoatSpec struct {
 	Turn      float64 // rad/s
 	Radius    float64 // hull radius in px
 	Lookahead float64 // how far ahead the captain checks for known rocks
+	React     float64 // seconds between a rock becoming known and the captain steering
 	Reward    int     // coins paid on docking
 	RepCost   int     // hearts lost on a wreck
 }
 
 var Specs = [...]BoatSpec{
-	Fishing:   {Name: "Fishing boat", Speed: 62, Turn: 2.3, Radius: 7, Lookahead: 115, Reward: 5, RepCost: 1},
-	Merchant:  {Name: "Merchant ship", Speed: 80, Turn: 1.3, Radius: 12, Lookahead: 170, Reward: 12, RepCost: 1},
-	Speedboat: {Name: "Speedboat", Speed: 140, Turn: 3.2, Radius: 6, Lookahead: 75, Reward: 10, RepCost: 1},
-	Ferry:     {Name: "Ferry", Speed: 52, Turn: 1.5, Radius: 11, Lookahead: 130, Reward: 25, RepCost: 2},
-	Rowboat:   {Name: "Lost rowboat", Speed: 48, Turn: 2.6, Radius: 5, Lookahead: 90, Reward: 15, RepCost: 1},
+	Fishing:   {Name: "Fishing boat", Speed: 62, Turn: 1.4, Radius: 7, Lookahead: 150, React: 0.4, Reward: 5, RepCost: 1},
+	Merchant:  {Name: "Merchant ship", Speed: 80, Turn: 0.8, Radius: 12, Lookahead: 210, React: 0.6, Reward: 12, RepCost: 1},
+	Speedboat: {Name: "Speedboat", Speed: 140, Turn: 1.8, Radius: 6, Lookahead: 230, React: 0.5, Reward: 10, RepCost: 1},
+	Ferry:     {Name: "Ferry", Speed: 52, Turn: 0.9, Radius: 11, Lookahead: 170, React: 0.5, Reward: 25, RepCost: 2},
+	Rowboat:   {Name: "Lost rowboat", Speed: 48, Turn: 1.5, Radius: 5, Lookahead: 140, React: 0.4, Reward: 15, RepCost: 1},
 }
 
 // NightConfig describes what a single night throws at the player.

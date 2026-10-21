@@ -59,7 +59,8 @@ type Boat struct {
 	Slow    float64 // seconds of foghorn slowdown left
 	Lit     bool
 	Avoid   bool // steering around a rock this frame
-	memory  map[*Rock]bool
+	memory  map[*Rock]float64 // rock -> time the captain noticed it
+	turnVel float64           // current rate of turn, rad/s
 	phase   float64
 }
 
@@ -423,8 +424,8 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 	// notice rocks while they themselves are in the light.
 	if b.Kind != Rowboat || b.Lit {
 		for _, r := range w.Rocks {
-			if r.IsKnown() && b.Pos.Dist(r.Pos) < s.Lookahead*2.5 {
-				b.memory[r] = true
+			if _, ok := b.memory[r]; !ok && r.IsKnown() && b.Pos.Dist(r.Pos) < s.Lookahead*1.5 {
+				b.memory[r] = w.Time
 			}
 		}
 	}
@@ -438,21 +439,32 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 		desired = target.Sub(b.Pos).Angle()
 	}
 
-	// Feeler: find the nearest remembered rock in our path and turn away.
+	// Feeler: find the nearest remembered rock in our path and turn away. A
+	// captain needs a moment to react, and the hull turns gradually, so a rock
+	// lit too late is hit anyway.
 	avoid, closest := 0.0, math.Inf(1)
-	for r := range b.memory {
-		d := r.Pos.Sub(b.Pos)
-		along := d.Dot(h)
-		if along < -r.R || along > s.Lookahead+r.R {
+	// Check both the current heading and where the rudder is taking us, so a
+	// boat does not swing back into a rock it has just steered around.
+	ahead := FromAngle(b.Heading + b.turnVel*0.6)
+	home := b.Pos.Dist(LighthousePos)
+	for r, seen := range b.memory {
+		if w.Time-seen < s.React {
 			continue
 		}
-		lat := h.Cross(d)
-		if math.Abs(lat) < r.R+s.Radius+10 && along < closest {
-			closest = along
-			if lat > 0 {
-				avoid = -1
-			} else {
+		d := r.Pos.Sub(b.Pos)
+		for _, dir := range [2]Vec{h, ahead} {
+			along := d.Dot(dir)
+			// Rocks beyond the lighthouse are not in the way.
+			if along < -r.R || along > s.Lookahead+r.R || along > home {
+				continue
+			}
+			lat := dir.Cross(d)
+			if math.Abs(lat) < r.R+s.Radius+14 && along < closest {
+				closest = along
 				avoid = 1
+				if h.Cross(d) > 0 {
+					avoid = -1
+				}
 			}
 		}
 	}
@@ -463,7 +475,10 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 	} else {
 		turn = clamp(angleDiff(b.Heading, desired)*3, -s.Turn, s.Turn)
 	}
-	b.Heading += turn * dt
+	// The rudder needs about half a second to reach full lock.
+	maxStep := s.Turn * 2 * dt
+	b.turnVel += clamp(turn-b.turnVel, -maxStep, maxStep)
+	b.Heading += b.turnVel * dt
 
 	speed := s.Speed
 	if b.Slow > 0 {
@@ -508,7 +523,7 @@ func (w *World) addBoat(k BoatKind, p Vec) *Boat {
 		Kind:    k,
 		Pos:     p,
 		Heading: LighthousePos.Sub(p).Angle(),
-		memory:  map[*Rock]bool{},
+		memory:  map[*Rock]float64{},
 		phase:   w.rng.Float64() * 2 * math.Pi,
 	}
 	w.Boats = append(w.Boats, b)

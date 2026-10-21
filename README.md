@@ -25,6 +25,7 @@ On Linux, Ebitengine needs the X11/GL headers
   and follows the light home, so sweep the beam to lead boats around rocks.
 - A rock inside the beam becomes known to every boat for 5 seconds (orange ring), and nearby captains remember it.
   Boats steer around rocks they know and crash into rocks they don't.
+  Light rocks early: captains need a moment to react and turn gradually, so a rock lit too late is hit anyway.
 - Space turns the lamp off and on to save oil (oil is limited from night 2).
 - Right click (or F) sounds the foghorn once you have bought it.
 - Each night you have 3 hearts. A wreck costs one (the ferry costs two). Run out and the run ends.
