@@ -58,7 +58,7 @@ type Boat struct {
 	Heading float64
 	Slow    float64 // seconds of foghorn slowdown left
 	Lit     bool
-	Avoid   bool // steering around a rock this frame
+	Avoid   bool              // steering around a rock this frame
 	memory  map[*Rock]float64 // rock -> time the captain noticed it
 	turnVel float64           // current rate of turn, rad/s
 	phase   float64
