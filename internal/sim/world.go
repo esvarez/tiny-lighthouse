@@ -532,7 +532,7 @@ func (w *World) startNight(n int) {
 
 	w.Rocks = nil
 	for i := 0; i < cfg.Rocks; i++ {
-		w.Rocks = append(w.Rocks, &Rock{Pos: w.freeSpot(100), R: 22 + w.rng.Float64()*16})
+		w.Rocks = append(w.Rocks, &Rock{Pos: w.freeSpot(125), R: 30 + w.rng.Float64()*20})
 	}
 	for i := 0; i < cfg.Logs; i++ {
 		// Logs drift in a band above or below the island.
@@ -545,7 +545,7 @@ func (w *World) startNight(n int) {
 		if w.rng.Intn(2) == 0 {
 			v = -v
 		}
-		w.Rocks = append(w.Rocks, &Rock{Pos: p, Vel: Vec{v, 0}, R: 13, Log: true})
+		w.Rocks = append(w.Rocks, &Rock{Pos: p, Vel: Vec{v, 0}, R: 18, Log: true})
 	}
 	w.placeBuoys()
 
@@ -582,7 +582,7 @@ func (w *World) freeSpot(minSep float64) Vec {
 	var p Vec
 	for try := 0; try < 200; try++ {
 		p = Vec{90 + w.rng.Float64()*(Width-180), 90 + w.rng.Float64()*(Height-180)}
-		if p.Dist(LighthousePos) < 130 {
+		if p.Dist(LighthousePos) < 145 {
 			continue
 		}
 		ok := true

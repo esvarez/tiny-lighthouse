@@ -45,16 +45,16 @@ type NightConfig struct {
 
 // Nights follows the progression table of the design document.
 var Nights = [...]NightConfig{
-	{Boats: 4, Kinds: []BoatKind{Fishing}, Rocks: 4, Intro: "Boats sail to the lighthouse and turn toward your beam. Guide them past the rocks."},
-	{Boats: 6, Kinds: []BoatKind{Fishing}, Rocks: 5, OilLimit: true, Intro: "Oil now runs out. Space turns the lamp off to save it."},
-	{Boats: 7, Kinds: []BoatKind{Fishing, Merchant}, New: []BoatKind{Merchant}, Rocks: 6, OilLimit: true, Intro: "Merchant ships are wide and turn slowly. Warn them early."},
-	{Boats: 8, Kinds: []BoatKind{Fishing, Merchant}, Rocks: 6, Fogs: 2, OilLimit: true, Intro: "Light fog: the beam reaches less far inside it."},
-	{Boats: 9, Kinds: []BoatKind{Fishing, Merchant, Speedboat}, New: []BoatKind{Speedboat}, Rocks: 7, Fogs: 2, OilLimit: true, Intro: "Speedboats react late. Aim quickly."},
-	{Boats: 10, Kinds: []BoatKind{Fishing, Merchant, Speedboat}, Rocks: 6, Logs: 3, Fogs: 2, OilLimit: true, Intro: "Drifting logs move across the bay."},
-	{Boats: 10, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry}, New: []BoatKind{Ferry}, Rocks: 7, Logs: 2, Fogs: 2, OilLimit: true, Intro: "The ferry carries the whole town. Losing it costs 2 hearts."},
-	{Boats: 11, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry}, Rocks: 7, Logs: 2, Fogs: 1, Storm: true, OilLimit: true, Intro: "First storm: wind pushes boats and lightning damages the tower."},
-	{Boats: 12, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry, Rowboat}, New: []BoatKind{Rowboat}, Rocks: 7, Logs: 2, Fogs: 5, OilLimit: true, Intro: "Heavy fog. Lost rowboats only see rocks while you keep them in the light."},
-	{Boats: 14, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry, Rowboat}, Rocks: 8, Logs: 4, Fogs: 3, Storm: true, OilLimit: true, Intro: "The final storm. Everything at once."},
+	{Boats: 6, Kinds: []BoatKind{Fishing}, Rocks: 6, Intro: "Boats sail to the lighthouse and turn toward your beam. Guide them past the rocks."},
+	{Boats: 9, Kinds: []BoatKind{Fishing}, Rocks: 7, OilLimit: true, Intro: "Oil now runs out. Space turns the lamp off to save it."},
+	{Boats: 10, Kinds: []BoatKind{Fishing, Merchant}, New: []BoatKind{Merchant}, Rocks: 8, OilLimit: true, Intro: "Merchant ships are wide and turn slowly. Warn them early."},
+	{Boats: 12, Kinds: []BoatKind{Fishing, Merchant}, Rocks: 8, Fogs: 2, OilLimit: true, Intro: "Light fog: the beam reaches less far inside it."},
+	{Boats: 13, Kinds: []BoatKind{Fishing, Merchant, Speedboat}, New: []BoatKind{Speedboat}, Rocks: 9, Fogs: 2, OilLimit: true, Intro: "Speedboats react late. Aim quickly."},
+	{Boats: 15, Kinds: []BoatKind{Fishing, Merchant, Speedboat}, Rocks: 8, Logs: 3, Fogs: 2, OilLimit: true, Intro: "Drifting logs move across the bay."},
+	{Boats: 15, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry}, New: []BoatKind{Ferry}, Rocks: 9, Logs: 2, Fogs: 2, OilLimit: true, Intro: "The ferry carries the whole town. Losing it costs 2 hearts."},
+	{Boats: 16, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry}, Rocks: 9, Logs: 2, Fogs: 1, Storm: true, OilLimit: true, Intro: "First storm: wind pushes boats and lightning damages the tower."},
+	{Boats: 18, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry, Rowboat}, New: []BoatKind{Rowboat}, Rocks: 9, Logs: 2, Fogs: 5, OilLimit: true, Intro: "Heavy fog. Lost rowboats only see rocks while you keep them in the light."},
+	{Boats: 20, Kinds: []BoatKind{Fishing, Merchant, Speedboat, Ferry, Rowboat}, Rocks: 11, Logs: 4, Fogs: 3, Storm: true, OilLimit: true, Intro: "The final storm. Everything at once."},
 }
 
 // UpgradeID indexes Upgrades.
