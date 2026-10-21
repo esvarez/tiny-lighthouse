@@ -1,0 +1,4 @@
+/tide-keeper
+/tiny-lighthouse
+web/*.wasm
+web/wasm_exec.js
