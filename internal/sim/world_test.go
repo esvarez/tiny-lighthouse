@@ -289,3 +289,38 @@ func botAim(w *World) Vec {
 	}
 	return aim
 }
+
+func TestDebugSpawnAtCursor(t *testing.T) {
+	w := emptyNight(1)
+	w.spawnQueue = []BoatKind{Fishing}
+	w.spawnTimer = 1e9
+	rock := &Rock{Pos: Vec{200, 200}, R: 60, B: 20}
+	w.Rocks = []*Rock{rock}
+	w.Update(dt, Input{Aim: Vec{200, 200}, Spawn: int(Merchant) + 1})
+	w.Update(dt, aimAway)
+	if w.Wrecked != 0 || w.Hearts != HeartsPerNite {
+		t.Fatalf("debug wreck should not count: wrecked=%d hearts=%d", w.Wrecked, w.Hearts)
+	}
+	w.Update(dt, Input{Aim: Vec{100, 500}, Spawn: int(Speedboat) + 1})
+	if len(w.Boats) != 1 || w.Boats[0].Kind != Speedboat || !w.Boats[0].Debug {
+		t.Fatalf("boats=%+v", w.Boats)
+	}
+}
+
+func TestOvalRocksLieAcrossTheRoute(t *testing.T) {
+	w := New(7, 1)
+	w.startNight(5)
+	for _, r := range w.Rocks {
+		if r.Log {
+			continue
+		}
+		if r.R <= r.B {
+			t.Fatalf("rock is not oval: R=%v B=%v", r.R, r.B)
+		}
+		// The long axis should be roughly perpendicular to the lighthouse.
+		radial := LighthousePos.Sub(r.Pos).Angle()
+		if d := math.Abs(math.Cos(r.Angle - radial)); d > 0.3 {
+			t.Errorf("rock at %v is not across the route (cos=%.2f)", r.Pos, d)
+		}
+	}
+}

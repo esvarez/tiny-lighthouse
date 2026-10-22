@@ -87,6 +87,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	switch w.Phase {
 	case sim.PhaseNight:
 		drawHUD(screen, w)
+		if g.debug {
+			drawDebug(screen, g)
+		}
 	case sim.PhaseDay:
 		drawDay(screen, w)
 	case sim.PhaseWon:
@@ -173,6 +176,27 @@ func drawBeam(dst *ebiten.Image, w *sim.World) {
 	}
 }
 
+// ellipse returns the outline of an oval with half-length a along angle and
+// half-width b, with a little wobble so rocks look less machined.
+func ellipse(c sim.Vec, a, b, angle, wobble, seed float64) []sim.Vec {
+	const n = 32
+	axis, side := sim.FromAngle(angle), sim.FromAngle(angle+math.Pi/2)
+	pts := make([]sim.Vec, n)
+	for i := range pts {
+		t := 2 * math.Pi * float64(i) / n
+		k := 1 + wobble*math.Sin(3*t+seed)
+		pts[i] = c.Add(axis.Scale(math.Cos(t) * a * k)).Add(side.Scale(math.Sin(t) * b * k))
+	}
+	return pts
+}
+
+func strokeLoop(dst *ebiten.Image, pts []sim.Vec, width float32, c color.RGBA) {
+	for i, p := range pts {
+		q := pts[(i+1)%len(pts)]
+		vector.StrokeLine(dst, f32(p.X), f32(p.Y), f32(q.X), f32(q.Y), width, c, true)
+	}
+}
+
 func drawRock(dst *ebiten.Image, r *sim.Rock, night bool) {
 	c := colRockDark
 	switch {
@@ -183,26 +207,54 @@ func drawRock(dst *ebiten.Image, r *sim.Rock, night bool) {
 	case r.IsKnown():
 		c = color.RGBA{50, 52, 60, 255}
 	}
-	x, y := f32(r.Pos.X), f32(r.Pos.Y)
-	if r.Log {
-		vector.StrokeLine(dst, x-f32(r.R)*1.8, y, x+f32(r.R)*1.8, y, f32(r.R)*1.1, c, true)
-	} else {
-		// A lumpy rock: three overlapping circles.
-		vector.DrawFilledCircle(dst, x, y, f32(r.R), c, true)
-		vector.DrawFilledCircle(dst, x+f32(r.R)*0.5, y-f32(r.R)*0.35, f32(r.R)*0.7, c, true)
-		vector.DrawFilledCircle(dst, x-f32(r.R)*0.55, y+f32(r.R)*0.2, f32(r.R)*0.6, c, true)
+	if r.Log && (r.Lit || !night) {
+		c = color.RGBA{105, 80, 55, 255}
 	}
+	a, b := r.R, r.B
+	if b <= 0 {
+		b = a
+	} else {
+		a -= 0.1 * b // match the circles used for collisions
+	}
+	wobble, seed := 0.07, r.Pos.X*0.13
+	if r.Log {
+		wobble = 0
+	}
+	fillPoly(dst, ellipse(r.Pos, a, b, r.Angle, wobble, seed), c, ebiten.BlendSourceOver)
 	if night && r.IsKnown() {
 		// The "known" ring fades as the warning expires.
-		a := 0.9
+		alpha := 0.9
 		if !r.Buoy {
-			a = 0.25 + 0.65*r.Known/sim.KnownTime
+			alpha = 0.25 + 0.65*r.Known/sim.KnownTime
 		}
-		vector.StrokeCircle(dst, x, y, f32(r.R)+7, 1.5, rgba(colWarn, a), true)
+		strokeLoop(dst, ellipse(r.Pos, a+7, b+7, r.Angle, 0, 0), 1.5, rgba(colWarn, alpha))
 	}
 	if r.Buoy {
-		vector.DrawFilledCircle(dst, x+f32(r.R)+8, y-f32(r.R), 4, color.RGBA{230, 60, 50, 255}, true)
+		vector.DrawFilledCircle(dst, f32(r.Pos.X), f32(r.Pos.Y-b-8), 4, color.RGBA{230, 60, 50, 255}, true)
 	}
+}
+
+func drawDebug(dst *ebiten.Image, g *Game) {
+	w := g.world
+	for _, b := range w.Boats {
+		t := b.Pos.Add(sim.FromAngle(b.Target).Scale(40))
+		c := colGood
+		if b.Avoid {
+			c = colWarn
+		}
+		vector.StrokeLine(dst, f32(b.Pos.X), f32(b.Pos.Y), f32(t.X), f32(t.Y), 1, c, true)
+		if b.Debug {
+			vector.StrokeCircle(dst, f32(b.Pos.X), f32(b.Pos.Y), f32(b.Spec().Radius)+10, 1, rgba(colText, 0.7), true)
+		}
+	}
+	for _, r := range w.Rocks {
+		for _, c := range r.Parts() {
+			vector.StrokeCircle(dst, f32(c.Pos.X), f32(c.Pos.Y), f32(c.R), 1, rgba(colDim, 0.35), true)
+		}
+	}
+	msg := fmt.Sprintf("DEBUG · click spawns a %s (1-5 change type) · Shift focuses · F1 exits", sim.Specs[g.spawnKind].Name)
+	vector.DrawFilledRect(dst, 0, sim.Height-28, sim.Width, 28, colPanel, false)
+	drawText(dst, msg, faceSmall, 12, sim.Height-23, colLantern)
 }
 
 func drawBoat(dst *ebiten.Image, b *sim.Boat, t float64) {

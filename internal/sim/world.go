@@ -41,9 +41,12 @@ const (
 	PhaseLost
 )
 
+// Rock is an oval obstacle: R is the half-length along Angle and B the
+// half-width (B == 0 means a round rock of radius R).
 type Rock struct {
 	Pos, Vel Vec
-	R        float64
+	R, B     float64
+	Angle    float64
 	Known    float64 // seconds left while it is known to all boats
 	Buoy     bool    // permanently marked
 	Log      bool    // drifting
@@ -52,6 +55,39 @@ type Rock struct {
 
 func (r *Rock) IsKnown() bool { return r.Buoy || r.Known > 0 }
 
+// Circle is one of the overlapping circles that approximate a rock's shape.
+type Circle struct {
+	Pos Vec
+	R   float64
+}
+
+// Parts approximates the oval with a row of circles along its long axis, which
+// keeps lighting, collision and steering simple circle checks.
+func (r *Rock) Parts() []Circle {
+	if r.B <= 0 || r.B >= r.R {
+		return []Circle{{r.Pos, r.R}}
+	}
+	axis := FromAngle(r.Angle)
+	n := int(math.Ceil((r.R-r.B)/(r.B*0.5))) + 1
+	parts := make([]Circle, n)
+	for i := range parts {
+		// Spread centres from one end to the other; circles near the ends
+		// shrink a little so the outline stays oval rather than a capsule.
+		t := -1 + 2*float64(i)/float64(n-1)
+		parts[i] = Circle{r.Pos.Add(axis.Scale(t * (r.R - r.B))), r.B * math.Sqrt(1-0.3*t*t)}
+	}
+	return parts
+}
+
+func (r *Rock) hits(p Vec, radius float64) bool {
+	for _, c := range r.Parts() {
+		if p.Dist(c.Pos) < c.R+radius {
+			return true
+		}
+	}
+	return false
+}
+
 type Boat struct {
 	Kind    BoatKind
 	Pos     Vec
@@ -59,6 +95,8 @@ type Boat struct {
 	Slow    float64 // seconds of foghorn slowdown left
 	Lit     bool
 	Avoid   bool              // steering around a rock this frame
+	Debug   bool              // spawned by hand; never pays coins or costs hearts
+	Target  float64           // heading the captain is steering for
 	memory  map[*Rock]float64 // rock -> time the captain noticed it
 	turnVel float64           // current rate of turn, rad/s
 	phase   float64
@@ -100,6 +138,7 @@ type Input struct {
 	Buy        int  // day: 1..8 buys an upgrade, 0 = none
 	Repair     bool // day
 	Start      bool // day: light the lamp / end screens: restart
+	Spawn      int  // night, debug: spawns boat kind Spawn-1 at Aim, 0 = none
 }
 
 type World struct {
@@ -334,7 +373,13 @@ func (w *World) updateNight(dt float64, in Input) {
 			}
 		}
 		r.Known = math.Max(0, r.Known-dt)
-		r.Lit = w.Lit(r.Pos, r.R)
+		r.Lit = false
+		for _, c := range r.Parts() {
+			if w.Lit(c.Pos, c.R) {
+				r.Lit = true
+				break
+			}
+		}
 		if r.Lit {
 			r.Known = KnownTime
 		}
@@ -347,6 +392,10 @@ func (w *World) updateNight(dt float64, in Input) {
 	}
 
 	// Spawning.
+	if in.Spawn > 0 && in.Spawn <= len(Specs) {
+		b := w.addBoat(BoatKind(in.Spawn-1), in.Aim)
+		b.Debug = true
+	}
 	if len(w.spawnQueue) > 0 {
 		w.spawnTimer -= dt
 		if w.spawnTimer <= 0 {
@@ -363,15 +412,22 @@ func (w *World) updateNight(dt float64, in Input) {
 		case boatSailing:
 			kept = append(kept, b)
 		case boatDocked:
+			if b.Debug {
+				w.addEffect(EffectDock, b.Pos, "docked")
+				continue
+			}
 			s := b.Spec()
 			w.Coins += s.Reward
 			w.Docked++
 			w.TotalSaved++
 			w.addEffect(EffectDock, b.Pos, "+"+strconv.Itoa(s.Reward))
 		case boatWrecked:
+			w.addEffect(EffectWreck, b.Pos, "")
+			if b.Debug {
+				continue
+			}
 			w.Wrecked++
 			w.Hearts -= b.Spec().RepCost
-			w.addEffect(EffectWreck, b.Pos, "")
 		}
 	}
 	w.Boats = kept
@@ -430,7 +486,6 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 		}
 	}
 
-	h := FromAngle(b.Heading)
 	desired := LighthousePos.Sub(b.Pos).Angle()
 	if b.Kind == Rowboat && b.Pos.Dist(LighthousePos) > 120 {
 		desired += math.Sin(w.Time*0.7+b.phase) * 1.1
@@ -439,42 +494,49 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 		desired = target.Sub(b.Pos).Angle()
 	}
 
-	// Feeler: find the nearest remembered rock in our path and turn away. A
-	// captain needs a moment to react, and the hull turns gradually, so a rock
-	// lit too late is hit anyway.
-	avoid, closest := 0.0, math.Inf(1)
-	// Check both the current heading and where the rudder is taking us, so a
-	// boat does not swing back into a rock it has just steered around.
-	ahead := FromAngle(b.Heading + b.turnVel*0.6)
-	home := b.Pos.Dist(LighthousePos)
+	// Captains look for the heading closest to the one they want whose path
+	// is clear of every rock they know about. They need a moment to react to a
+	// newly lit rock and the hull turns gradually, so a rock lit too late is
+	// hit anyway.
+	var known []Circle
 	for r, seen := range b.memory {
-		if w.Time-seen < s.React {
-			continue
+		if w.Time-seen >= s.React {
+			known = append(known, r.Parts()...)
 		}
-		d := r.Pos.Sub(b.Pos)
-		for _, dir := range [2]Vec{h, ahead} {
-			along := d.Dot(dir)
-			// Rocks beyond the lighthouse are not in the way.
-			if along < -r.R || along > s.Lookahead+r.R || along > home {
-				continue
-			}
-			lat := dir.Cross(d)
-			if math.Abs(lat) < r.R+s.Radius+14 && along < closest {
-				closest = along
-				avoid = 1
-				if h.Cross(d) > 0 {
-					avoid = -1
+	}
+	reach := math.Min(s.Lookahead, b.Pos.Dist(LighthousePos)-IslandRadius)
+	var wind Vec
+	if w.Storm {
+		wind = w.Wind
+	}
+	clear := func(a, margin float64) bool {
+		return b.courseClear(a, reach, s.Radius+margin, wind, known)
+	}
+	heading := desired
+	b.Avoid = false
+	if len(known) > 0 && !clear(desired, 16) {
+		b.Avoid = true
+		// Pick the clear heading that strays least from the goal while
+		// staying close to where the bow already points, so the captain
+		// commits to one way round instead of flipping sides mid-turn. A wide
+		// berth is preferred over a narrow one.
+		best := math.Inf(1)
+		for k := -12; k <= 12; k++ {
+			a := desired + float64(k)*0.25
+			cost := math.Abs(float64(k)*0.25) + 1.5*math.Abs(angleDiff(b.Heading, a))
+			if !clear(a, 16) {
+				if !clear(a, 4) {
+					continue
 				}
+				cost += 1
+			}
+			if cost < best {
+				best, heading = cost, a
 			}
 		}
 	}
-	b.Avoid = avoid != 0
-	var turn float64
-	if b.Avoid {
-		turn = avoid * s.Turn
-	} else {
-		turn = clamp(angleDiff(b.Heading, desired)*3, -s.Turn, s.Turn)
-	}
+	b.Target = heading
+	turn := clamp(angleDiff(b.Heading, heading)*3, -s.Turn, s.Turn)
 	// The rudder needs about half a second to reach full lock.
 	maxStep := s.Turn * 2 * dt
 	b.turnVel += clamp(turn-b.turnVel, -maxStep, maxStep)
@@ -493,7 +555,7 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 	b.Pos.Y = clamp(b.Pos.Y, -30, Height+30)
 
 	for _, r := range w.Rocks {
-		if b.Pos.Dist(r.Pos) < r.R+s.Radius*0.8 {
+		if r.hits(b.Pos, s.Radius*0.8) {
 			return boatWrecked
 		}
 	}
@@ -503,7 +565,86 @@ func (w *World) updateBoat(b *Boat, dt float64) boatResult {
 	return boatSailing
 }
 
+// courseClear plays the boat's own steering forward for a couple of seconds
+// as it turns toward heading a, then follows a straight line, and reports
+// whether that course stays clear of the rocks. Simulating the turn matters:
+// a slow rudder sweeps the bow through water a straight line would miss.
+func (b *Boat) courseClear(a, reach, radius float64, wind Vec, rocks []Circle) bool {
+	s := b.Spec()
+	const step = 0.15
+	horizon := math.Min(2.4, math.Max(1.2, reach/s.Speed))
+	p, head, tv := b.Pos, b.Heading, b.turnVel
+	start := make([]float64, len(rocks))
+	for i, c := range rocks {
+		start[i] = p.Dist(c.Pos)
+	}
+	for t := 0.0; t < horizon; t += step {
+		turn := clamp(angleDiff(head, a)*3, -s.Turn, s.Turn)
+		tv += clamp(turn-tv, -s.Turn*2*step, s.Turn*2*step)
+		head += tv * step
+		p = p.Add(FromAngle(head).Scale(s.Speed * step)).Add(wind.Scale(step))
+		for i, c := range rocks {
+			// Inside the margin already: only moving closer counts.
+			if d := p.Dist(c.Pos); d < c.R+radius && (start[i] >= c.R+radius || d < start[i]) {
+				return false
+			}
+		}
+	}
+	course := FromAngle(head).Scale(s.Speed).Add(wind).Angle()
+	return pathClear(p, course, reach-s.Speed*horizon, radius, rocks)
+}
+
+// pathClear reports whether a hull of the given radius (including any safety
+// margin) can sail reach pixels from p along angle a without touching any of
+// the circles.
+func pathClear(p Vec, a, reach, radius float64, rocks []Circle) bool {
+	dir := FromAngle(a)
+	for _, c := range rocks {
+		d := c.Pos.Sub(p)
+		clear := c.R + radius
+		if d.Len() < clear {
+			// Already inside the safety margin: any heading away is fine.
+			if d.Dot(dir) > 0 {
+				return false
+			}
+			continue
+		}
+		along := clamp(d.Dot(dir), 0, math.Max(reach, 0))
+		if p.Add(dir.Scale(along)).Dist(c.Pos) < clear {
+			return false
+		}
+	}
+	return true
+}
+
+// spawnBoat brings a boat in from a random edge, through open water so it has
+// room to react to the first rock on its way.
 func (w *World) spawnBoat(k BoatKind) {
+	var p Vec
+	for try := 0; try < 30; try++ {
+		p = w.edgePoint()
+		if w.openWater(p, 200) {
+			break
+		}
+	}
+	w.addBoat(k, p)
+}
+
+func (w *World) openWater(p Vec, dist float64) bool {
+	for _, r := range w.Rocks {
+		if r.Log {
+			continue
+		}
+		for _, c := range r.Parts() {
+			if p.Dist(c.Pos) < c.R+dist {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (w *World) edgePoint() Vec {
 	var p Vec
 	switch w.rng.Intn(4) {
 	case 0: // left edge
@@ -515,7 +656,7 @@ func (w *World) spawnBoat(k BoatKind) {
 	default: // bottom edge
 		p = Vec{40 + w.rng.Float64()*(Width-80), Height + 20}
 	}
-	w.addBoat(k, p)
+	return p
 }
 
 func (w *World) addBoat(k BoatKind, p Vec) *Boat {
@@ -547,7 +688,9 @@ func (w *World) startNight(n int) {
 
 	w.Rocks = nil
 	for i := 0; i < cfg.Rocks; i++ {
-		w.Rocks = append(w.Rocks, &Rock{Pos: w.freeSpot(125), R: 30 + w.rng.Float64()*20})
+		if r := w.placeRock(); r != nil {
+			w.Rocks = append(w.Rocks, r)
+		}
 	}
 	for i := 0; i < cfg.Logs; i++ {
 		// Logs drift in a band above or below the island.
@@ -560,7 +703,7 @@ func (w *World) startNight(n int) {
 		if w.rng.Intn(2) == 0 {
 			v = -v
 		}
-		w.Rocks = append(w.Rocks, &Rock{Pos: p, Vel: Vec{v, 0}, R: 18, Log: true})
+		w.Rocks = append(w.Rocks, &Rock{Pos: p, Vel: Vec{v, 0}, R: 30, B: 9, Log: true})
 	}
 	w.placeBuoys()
 
@@ -591,27 +734,41 @@ func (w *World) startNight(n int) {
 	w.spawnTimer = 2
 }
 
-// freeSpot picks a rock position away from the harbor, the screen edges and
-// other rocks.
-func (w *World) freeSpot(minSep float64) Vec {
-	var p Vec
-	for try := 0; try < 200; try++ {
-		p = Vec{90 + w.rng.Float64()*(Width-180), 90 + w.rng.Float64()*(Height-180)}
-		if p.Dist(LighthousePos) < 145 {
-			continue
+// placeRock makes an oval rock lying across the route to the lighthouse, away
+// from the island, the screen edges and other rocks. Every rock keeps a gap
+// wide enough for boats to pass. It returns nil if no spot is free.
+func (w *World) placeRock() *Rock {
+	const gap = 55
+	for try := 0; try < 300; try++ {
+		p := Vec{90 + w.rng.Float64()*(Width-180), 90 + w.rng.Float64()*(Height-180)}
+		r := &Rock{
+			Pos:   p,
+			R:     45 + w.rng.Float64()*30,
+			B:     18 + w.rng.Float64()*8,
+			Angle: LighthousePos.Sub(p).Angle() + math.Pi/2 + (w.rng.Float64()-0.5)*0.4,
 		}
-		ok := true
-		for _, r := range w.Rocks {
-			if p.Dist(r.Pos) < minSep {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			return p
+		if w.rockFits(r, gap) {
+			return r
 		}
 	}
-	return p
+	return nil
+}
+
+func (w *World) rockFits(r *Rock, gap float64) bool {
+	for _, c := range r.Parts() {
+		if c.Pos.Dist(LighthousePos) < c.R+IslandRadius+80 ||
+			c.Pos.X-c.R < 80 || c.Pos.X+c.R > Width-80 || c.Pos.Y-c.R < 70 || c.Pos.Y+c.R > Height-70 {
+			return false
+		}
+		for _, o := range w.Rocks {
+			for _, oc := range o.Parts() {
+				if c.Pos.Dist(oc.Pos) < c.R+oc.R+gap {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 // placeBuoys marks the static rocks closest to the harbor.

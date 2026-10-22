@@ -18,6 +18,11 @@ type Game struct {
 	touchIDs []ebiten.TouchID
 	newTouch []ebiten.TouchID
 	touchAt  map[ebiten.TouchID]time.Time
+
+	// Debug mode (F1 or -debug): a left click spawns a boat of spawnKind at
+	// the cursor, keys 1-5 pick the kind and Shift focuses the beam.
+	debug     bool
+	spawnKind sim.BoatKind
 }
 
 func (g *Game) Update() error {
@@ -35,9 +40,23 @@ func (g *Game) input() sim.Input {
 	}
 	space := inpututil.IsKeyJustPressed(ebiten.KeySpace)
 	enter := inpututil.IsKeyJustPressed(ebiten.KeyEnter)
+	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
+		g.debug = !g.debug
+	}
 	switch g.world.Phase {
 	case sim.PhaseNight:
 		in.ToggleLamp = space
+		if g.debug {
+			for i := range sim.Specs {
+				if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
+					g.spawnKind = sim.BoatKind(i)
+				}
+			}
+			in.Focus = ebiten.IsKeyPressed(ebiten.KeyShift)
+			if in.Click {
+				in.Spawn = int(g.spawnKind) + 1
+			}
+		}
 	case sim.PhaseDay:
 		in.Start = space || enter
 		in.Repair = inpututil.IsKeyJustPressed(ebiten.KeyR)
@@ -74,6 +93,7 @@ func (g *Game) Layout(int, int) (int, int) { return sim.Width, sim.Height }
 func main() {
 	night := flag.Int("night", 1, "night to start on (for playtesting)")
 	seed := flag.Int64("seed", time.Now().UnixNano(), "random seed for the night layouts")
+	debug := flag.Bool("debug", false, "start in debug mode (F1 toggles it in game)")
 	flag.Parse()
 
 	ebiten.SetWindowSize(sim.Width, sim.Height)
@@ -82,6 +102,7 @@ func main() {
 	g := &Game{
 		world:   sim.New(*seed, *night),
 		touchAt: map[ebiten.TouchID]time.Time{},
+		debug:   *debug,
 	}
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)

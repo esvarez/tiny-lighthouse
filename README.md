@@ -10,6 +10,7 @@ bay, and you point its rotating beam to guide them safely past the rocks. This i
 ```sh
 go run .                 # desktop
 go run . -night 8        # jump to a later night for playtesting
+go run . -debug          # debug mode (F1 also toggles it in game)
 make serve               # web build at http://localhost:8080
 go test ./...            # game rule tests
 ```
@@ -30,6 +31,13 @@ On Linux, Ebitengine needs the X11/GL headers
 - Right click (or F) sounds the foghorn once you have bought it.
 - Each night you have 3 hearts. A wreck costs one (the ferry costs two). Run out and the run ends.
 
+**Debug mode** (F1 or `-debug`)
+- Left click spawns a boat at the cursor heading for the lighthouse. Keys 1–5 pick the type
+  (fishing, merchant, speedboat, ferry, rowboat). Hand-spawned boats never pay coins or cost hearts.
+- Shift focuses the beam while debug mode is on.
+- Each boat shows the heading its captain is steering for (orange when dodging a rock), and rocks
+  show the circles used for collisions.
+
 **Day**
 - Read the captain's note, press 1–8 to buy upgrades, R to repair storm damage.
 - With the second lamp, click the sea to place it.
@@ -39,7 +47,7 @@ On Linux, Ebitengine needs the X11/GL headers
 
 - All 10 nights from the progression table, each introducing one new idea.
 - All five boat types (fishing, merchant, speedboat, ferry, lost rowboat).
-- Hazards: rocks, drifting logs, fog banks that shorten the beam, storms with wind and lightning damage.
+- Hazards: oval rocks lying across the routes to the lighthouse, drifting logs, fog banks that shorten the beam, storms with wind and lightning damage.
 - Oil, focus mode, lighthouse condition, coins and reputation hearts.
 - All eight upgrades, and a short captain's note each morning.
 
